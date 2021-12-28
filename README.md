@@ -1,2 +1,8 @@
-# conway-game-of-life
-conway game of life in a few lines of js. Click to draw cells, right click for rectangles, and press the spacebar to run.
+# Conway's game-of-life
+
+[Conway's game of life](https://en.wikipedia.org/wiki/Conway%27s_Game_of_Life) in a few lines of javascript
+* Click to draw cells
+* Right click for rectangle
+* Press the spacebar to run.
+
+Accessible at https://afauroux.github.io/conway-game-of-life/
