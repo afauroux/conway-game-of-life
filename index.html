@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <title>CodeWars</title>
+    <style>
+      html,
+      body {
+        width: 100%;
+        height: 100%;
+        margin: 0px;
+        border: 0;
+        overflow: hidden;
+        /*  Disable scrollbars */
+        display: block;
+        /* No floating content on sides */
+      }
+    </style>
+  </head>
+
+  <body>
+    <canvas id="canvas" style="position: absolute; left: 0px; top: 0px">
+    </canvas>
+
+    <script>
+      let canvas = document.getElementById("canvas");
+      let ctx = canvas.getContext("2d");
+      ctx.canvas.width = window.innerWidth;
+      ctx.canvas.height = window.innerHeight;
+      ctx.font = "20px Monospace";
+      let cellSize = 10;
+      let cursor = {
+        x: -1,
+        y: -1,
+      };
+      let blobs = [];
+      let blobing = false;
+      let play = false;
+      let grid = new Map();
+      let tickLenght = 0;
+      let tickNow = performance.now();
+      let tickPrev = performance.now();
+      let select = undefined;
+      let cmd = false;
+      let copied = [];
+
+      class Blob {
+        constructor(x, y, cellcoord, letter = undefined) {
+          if (cellcoord) {
+            this.x = x / cellSize - (x % cellSize);
+            this.y = y / cellSize - (y % cellSize);
+          } else {
+            this.x = x;
+            this.y = y;
+          }
+          this.ncount = 0;
+          this.letter = letter;
+        }
+
+        equal(blob) {
+          return this.x == blob.x && this.y == blob.y;
+        }
+
+        get hash() {
+          return this.x + "," + this.y;
+        }
+
+        get neighbor() {
+          return [
+            new Blob(this.x + 1, this.y + 1, false),
+            new Blob(this.x + 1, this.y, false),
+            new Blob(this.x + 1, this.y - 1, false),
+            new Blob(this.x, this.y - 1, false),
+            new Blob(this.x - 1, this.y - 1, false),
+            new Blob(this.x - 1, this.y, false),
+            new Blob(this.x - 1, this.y + 1, false),
+            new Blob(this.x, this.y + 1, false),
+          ];
+        }
+
+        get nb_neighbor() {
+          this.ncount = 0;
+          for (var b of this.neighbor) {
+            if (grid.has(b.hash)) {
+              this.ncount++;
+            }
+          }
+          return this.ncount;
+        }
+
+        get isAlive() {
+          if (this.nb_neighbor == 2 || this.nb_neighbor == 3) {
+            return true;
+          }
+          return false;
+        }
+
+        get babies() {
+          let babies = [];
+          for (var b of this.neighbor) {
+            if (b.nb_neighbor == 3) babies.push(b);
+          }
+          return babies;
+        }
+
+        draw() {
+          ctx.fillStyle = "rgb(0,0,0)";
+          if (this.letter) {
+            ctx.fillText(this.letter, this.x * cellSize, this.y * cellSize);
+          } else {
+            ctx.fillRect(
+              this.x * cellSize,
+              this.y * cellSize,
+              cellSize,
+              cellSize
+            );
+          }
+        }
+      }
+
+      // oooooooooooooooooo utils ooooooooooooooooo
+
+      function fillGrid() {
+        grid.forEach(function (key, value) {
+          value.draw();
+        });
+      }
+
+      function zeros(dimensions) {
+        var array = [];
+        for (var i = 0; i < dimensions[0]; ++i) {
+          array.push(dimensions.length == 1 ? 0 : zeros(dimensions.slice(1)));
+        }
+        return array;
+      }
+
+      function debug() {
+        return grid.forEach(function (v, k) {
+          console.log(k, v.nb_neighbor);
+        });
+      }
+
+      // oooooooooooooooo  mouse events  oooooooooooooooo
+
+      function roundCoord(coord) {
+        coord.x = coord.x - (coord.x % cellSize);
+        coord.y = coord.y - (coord.y % cellSize);
+        return coord;
+      }
+
+      function getMousePos(event) {
+        var rect = canvas.getBoundingClientRect();
+        coord = {
+          x: event.clientX - rect.left,
+          y: event.clientY - rect.top,
+        };
+        return roundCoord(coord);
+      }
+
+      canvas.onmousemove = function (event) {
+        cursor.x = getMousePos(event).x;
+        cursor.y = getMousePos(event).y;
+        if (blobing && !select) {
+          let b = new Blob(cursor.x, cursor.y, true);
+          grid.set(b.hash, b);
+        }
+      };
+      canvas.onmousedown = function (event) {
+        blobing = true;
+        if (event.getModifierState("Alt")) {
+          select = getMousePos(event);
+          blobbing = false;
+        } else if (event.getModifierState("Meta")) {
+          select = getMousePos(event);
+          cmd = true;
+          blobbing = false;
+        }
+      };
+      canvas.onmouseleave = function (event) {
+        blobing = false;
+        select = undefined;
+        cmd = false;
+      };
+      canvas.onmouseup = function (event) {
+        if (cmd) return;
+        if (blobing) {
+          let b = new Blob(cursor.x, cursor.y, true);
+          grid.set(b.hash, b);
+        }
+        blobing = false;
+        if (select) {
+          for (var x = select.x; x <= cursor.x; x += cellSize) {
+            for (var y = select.y; y <= cursor.y; y += cellSize) {
+              let b = new Blob(x, y, true);
+              grid.set(b.hash, b);
+            }
+          }
+        }
+        select = undefined;
+        cmd = false;
+      };
+      document.onkeyup = function () {
+        cmd = false;
+        select = false;
+      };
+      document.oncopy = function () {
+        if (select && cmd) {
+          copied = [];
+          console.log("copy");
+          for (var x = select.x; x < cursor.x; x += cellSize) {
+            for (var y = select.y; y < cursor.y; y += cellSize) {
+              let b = new Blob(x, y, true);
+              if (grid.has(b.hash)) {
+                b = new Blob(b.x - select.x, b.y - select.y, true); // we want the relative positions
+                copied.push(b);
+              }
+            }
+          }
+          console.log(copied);
+        }
+      };
+      document.onpaste = function () {
+        console.log("paste", copied);
+        copied.forEach(function (c) {
+          let b = new Blob(c.x + cursor.x, c.y + cursor.y, true);
+          grid.set(b.hash, b);
+          console.log(b);
+        });
+      };
+      /*canvas.onclick = function(event){
+          if(select)return;
+          let b = new Blob(cursor.x, cursor.y,true);
+          grid.set(b.hash,b);
+          
+      }*/
+
+      window.onresize = function (event) {
+        ctx.canvas.width = window.innerWidth;
+        ctx.canvas.height = window.innerHeight;
+      };
+      window.onkeypress = function (evt) {
+        evt = evt || window.event;
+        if (/[a-zA-Z]/.test(evt.key)) {
+          let b = new Blob(cursor.x, cursor.y, true, (letter = evt.key));
+          grid.set(b.hash, b);
+          console.log(evt.key);
+        }
+        if (evt.key === " " && play) {
+          play = false;
+          console.log("not play");
+        } else if (evt.key === " ") {
+          play = true;
+          console.log("play");
+        }
+      };
+
+      function drawCursor() {
+        ctx.strokeRect(cursor.x, cursor.y, 10, 10);
+      }
+
+      // // oooooooooooooooo   main draw routine  oooooooooooooooo
+      function redraw() {
+        if (play) {
+          tickLenght = 200;
+        } else {
+          tickLenght = 20;
+        }
+        if (performance.now() - tickPrev >= tickLenght) {
+          tickPrev = performance.now();
+          ctx.clearRect(0, 0, canvas.clientWidth, canvas.clientHeight);
+
+          if (select) {
+            ctx.strokeStyle = "black 1px";
+            ctx.strokeRect(
+              select.x,
+              select.y,
+              cursor.x - select.x + 1,
+              cursor.y - select.y + 1
+            );
+          }
+          let grid2 = new Map();
+          grid.forEach(function (blob, key) {
+            if (play) {
+              for (b of blob.babies) {
+                grid2.set(b.hash, b);
+              }
+              if (blob.isAlive) {
+                grid2.set(blob.hash, blob);
+              } else {
+                grid2.delete(blob.hash);
+              }
+            }
+            blob.draw();
+          });
+          if (play) grid = grid2;
+          drawCursor();
+          //debug();
+        }
+
+        window.requestAnimationFrame(redraw);
+      }
+      // drawGrid();
+      /*for(var i=0;i<canvas.width/cellSize;i++){
+           for(var j=0;j<canvas.height/cellSize;j++){
+               
+                   var b = new Blob(i,j,false);
+                   grid.set(b.hash,b);
+               
+           }
+       }*/
+      window.requestAnimationFrame(redraw);
+    </script>
+  </body>
+</html>
